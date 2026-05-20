@@ -3,112 +3,97 @@
 // ============================================================
 
 // ------------------------------------------------------------
+// IMAGE ASSETS
+// ------------------------------------------------------------
+let playerImg = null;
+let bgImg = null;
+
+// ------------------------------------------------------------
 // THE PLAYER OBJECT
-// An object groups related data together in one place.
-// Instead of separate variables (playerX, playerY, playerVX...),
-// we store everything about the player in one object.
 // ------------------------------------------------------------
 let player = {
-  x: 200, // horizontal position (centre of blob)
-  y: 100, // vertical position (centre of blob)
-
-  vx: 0, // horizontal velocity — how fast we're moving left/right
-  vy: 0, // vertical velocity — how fast we're moving up/down
-
-  r: 24, // radius of the blob shape
-
-  // Movement tuning — change these to adjust how the game feels
-  speed: 0.5,     // horizontal acceleration per frame
-  maxSpeed: 4,    // maximum horizontal speed
-  jumpForce: -12, // upward velocity applied when jumping (negative = upward)
-  friction: 0.8,  // horizontal slowdown when no key is pressed (0–1, lower = more friction)
-
-  onGround: false, // tracks whether the player is standing on something
+  x: 200,
+  y: 100,
+  vx: 0,
+  vy: 0,
+  r: 24, 
+  speed: 0.5,     
+  maxSpeed: 4,    
+  jumpForce: -12, 
+  friction: 0.8,  
+  onGround: false,
 };
 
 // ------------------------------------------------------------
-// PHYSICS CONSTANTS
-// Defined outside the player object so they can be shared
-// across multiple objects later (e.g. enemies)
+// PLATFORM OBJECT
 // ------------------------------------------------------------
-const GRAVITY = 0.6; // downward force added to vy every frame
+let platform = {
+  x: 300,
+  y: 250,
+  w: 200,
+  h: 20
+};
 
-// ------------------------------------------------------------
-// NOISE BLOB ANIMATION
-// We use p5's noise() function to make the blob edges wobble
-// organically. blobT increases each frame to animate the wobble.
-// ------------------------------------------------------------
-let blobT = 0; // time input for noise — increases each frame
-
-// Floor position — where the ground is
+const GRAVITY = 0.6; 
 let floorY;
 
 // ============================================================
 // setup()
-// Runs once at the very start of the sketch.
-// Sets up the canvas and positions the player on the floor.
 // ============================================================
 function setup() {
   createCanvas(800, 450);
-  floorY = height - 40;         // ground sits 40px from the bottom
-  player.y = floorY - player.r; // start the player sitting on the floor
+  floorY = height - 40;         
+  player.y = floorY - player.r; 
+
+  // Load images asynchronously. 
+  // If they fail to load, the game will still run using fallbacks.
+  loadImage('assets/images/amongus.png', 
+    img => playerImg = img, 
+    err => console.error('Could not find amongus.png')
+  );
+  
+  loadImage('assets/images/image.png', 
+    img => bgImg = img, 
+    err => console.error('Could not find image.png')
+  );
 }
 
 // ============================================================
 // draw()
-// Runs repeatedly in a loop after setup() finishes.
-// Each frame we clear the background, handle input,
-// apply physics, and draw everything.
 // ============================================================
 function draw() {
-  background(10); // near-black background
+  // Draw the background image if it has loaded, otherwise use a dark fallback
+  if (bgImg) {
+    image(bgImg, 0, 0, width, height);
+  } else {
+    background(10); 
+    fill(100);
+    textAlign(CENTER);
+    text("Background image missing or loading...", width/2, height/2);
+  }
 
   drawFloor();
+  drawPlatform();
   handleInput();
   applyPhysics();
   drawPlayer();
   drawHUD();
-
-  blobT += 0.015; // advance blob wobble animation each frame
 }
 
 // ------------------------------------------------------------
 // handleInput()
-// Checks which keys are held down this frame and updates
-// the player's velocity accordingly.
-// keyIsDown() returns true as long as the key is held —
-// unlike keyPressed(), which only fires once per press.
-// We check both arrow keys and WASD so either works.
 // ------------------------------------------------------------
 function handleInput() {
-  // --- Horizontal movement ---
-  if (keyIsDown(LEFT_ARROW) || keyIsDown(65)) { // LEFT or A
-    player.vx -= player.speed;
-  }
-  if (keyIsDown(RIGHT_ARROW) || keyIsDown(68)) { // RIGHT or D
-    player.vx += player.speed;
-  }
+  if (keyIsDown(LEFT_ARROW) || keyIsDown(65)) { player.vx -= player.speed; }
+  if (keyIsDown(RIGHT_ARROW) || keyIsDown(68)) { player.vx += player.speed; }
 
-  // --- Clamp horizontal speed ---
-  // constrain(value, min, max) keeps a value within a range.
-  // Without this, holding a key forever would accelerate infinitely.
   player.vx = constrain(player.vx, -player.maxSpeed, player.maxSpeed);
 
-  // --- Apply friction when no horizontal key is pressed ---
-  // Multiplying by a value less than 1 gradually slows the player down.
-  if (
-    !keyIsDown(LEFT_ARROW) &&
-    !keyIsDown(65) &&
-    !keyIsDown(RIGHT_ARROW) &&
-    !keyIsDown(68)
-  ) {
+  if (!keyIsDown(LEFT_ARROW) && !keyIsDown(65) && !keyIsDown(RIGHT_ARROW) && !keyIsDown(68)) {
     player.vx *= player.friction;
   }
 
-  // --- Jump ---
-  // The player can only jump when standing on the ground (onGround = true).
-  // This prevents jumping again mid-air.
-  if ((keyIsDown(UP_ARROW) || keyIsDown(87)) && player.onGround) { // UP or W
+  if ((keyIsDown(UP_ARROW) || keyIsDown(87)) && player.onGround) { 
     player.vy = player.jumpForce;
     player.onGround = false;
   }
@@ -116,93 +101,90 @@ function handleInput() {
 
 // ------------------------------------------------------------
 // applyPhysics()
-// Each frame we:
-//   1. Add gravity to vertical velocity (vy)
-//   2. Move the player by its velocity (vx, vy)
-//   3. Check if it has landed on the floor
 // ------------------------------------------------------------
 function applyPhysics() {
-  // 1. Apply gravity — pulls the player down every frame
   player.vy += GRAVITY;
-
-  // 2. Move player by its current velocity
   player.x += player.vx;
   player.y += player.vy;
 
-  // 3. Floor collision
-  // If the bottom of the blob goes below the floor, push it back up.
+  let onFloor = false;
+  let onPlatform = false;
+
+  // Floor collision
   if (player.y + player.r >= floorY) {
-    player.y = floorY - player.r; // snap to floor
-    player.vy = 0;                // stop falling
-    player.onGround = true;       // allow jumping again
+    player.y = floorY - player.r; 
+    player.vy = 0;                
+    onFloor = true;
+  }
+
+  // Platform collision
+  if (
+    player.vy >= 0 && 
+    player.x + player.r > platform.x && 
+    player.x - player.r < platform.x + platform.w && 
+    player.y + player.r >= platform.y && 
+    player.y - player.vy + player.r <= platform.y 
+  ) {
+    player.y = platform.y - player.r; 
+    player.vy = 0;
+    onPlatform = true;
+  }
+
+  if (onFloor || onPlatform) {
+    player.onGround = true;
   } else {
     player.onGround = false;
   }
 
-  // 4. Wall collision — keep player inside canvas
   player.x = constrain(player.x, player.r, width - player.r);
 }
 
 // ------------------------------------------------------------
 // drawPlayer()
-// The blob is drawn as a polygon using noise() to offset
-// each vertex slightly, creating an organic wobble effect.
-// push() and pop() save and restore drawing settings so
-// styles set here don't affect other drawing functions.
 // ------------------------------------------------------------
 function drawPlayer() {
-  push(); // save current drawing settings
-
-  // Teal fill, no outline
-  fill(0, 200, 180);
-  noStroke();
-
-  // Draw a circle-ish shape with noisy edges
-  beginShape();
-  let numPoints = 48; // more points = smoother shape
-  for (let i = 0; i < numPoints; i++) {
-    let angle = (TWO_PI / numPoints) * i;
-
-    // noise() returns a smooth random value between 0 and 1.
-    // We use it to push each vertex in or out slightly.
-    let noiseVal = noise(cos(angle) * 0.8 + blobT, sin(angle) * 0.8 + blobT);
-
-    // map() converts noise (0–1) to a radius offset (-8 to +8 pixels)
-    let r = player.r + map(noiseVal, 0, 1, -8, 8);
-
-    // Convert polar coordinates (angle, radius) to x/y
-    let vertX = player.x + cos(angle) * r;
-    let vertY = player.y + sin(angle) * r;
-    vertex(vertX, vertY);
+  push();
+  if (playerImg) {
+    // Draw the image if it loaded successfully
+    imageMode(CENTER);
+    image(playerImg, player.x, player.y, player.r * 2, player.r * 2);
+  } else {
+    // Fallback shape if the image is missing
+    fill(255, 0, 0);
+    noStroke();
+    ellipse(player.x, player.y, player.r * 2, player.r * 2);
+    fill(255);
+    textSize(10);
+    textAlign(CENTER, CENTER);
+    text("Missing\nImage", player.x, player.y);
   }
-  endShape(CLOSE);
+  pop();
+}
 
-  // Draw two simple eyes
-  fill(10);
-  ellipse(player.x - 8, player.y - 6, 8, 8);
-  ellipse(player.x + 8, player.y - 6, 8, 8);
-
-  pop(); // restore drawing settings
+// ------------------------------------------------------------
+// drawPlatform()
+// ------------------------------------------------------------
+function drawPlatform() {
+  fill(150, 100, 50); 
+  stroke(100, 50, 20);
+  strokeWeight(2);
+  rect(platform.x, platform.y, platform.w, platform.h, 5); 
 }
 
 // ------------------------------------------------------------
 // drawFloor()
-// A simple rectangle across the bottom of the canvas.
 // ------------------------------------------------------------
 function drawFloor() {
-  fill(40, 120, 110); // dark teal
+  fill(40, 120, 110); 
   noStroke();
   rect(0, floorY, width, height - floorY);
 }
 
 // ------------------------------------------------------------
 // drawHUD()
-// HUD = Heads Up Display.
-// Shows controls on screen so the player always knows
-// how to interact without needing external instructions.
 // ------------------------------------------------------------
 function drawHUD() {
-  fill(180);
+  fill(255); 
   noStroke();
   textSize(13);
   textAlign(LEFT);
