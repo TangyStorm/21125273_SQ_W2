@@ -36,8 +36,9 @@ The console will show any errors in your sketch.
 
 ## Assets
 
-No external assets used. All visuals are generated with p5.js.
+amongus.png
+image.png
 
 ## References
 
-N/A
+Among Us Wiki. (n.d.). Blue | Among Us Wiki | Fandom. Among Us Wiki. Retrieved from https://among-us.fandom.com/wiki/Blue
